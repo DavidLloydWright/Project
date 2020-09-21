@@ -8,6 +8,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.autograd as autograd
 import torch.nn.functional as F
+import wandb
+
 
 import logger
 import copy
@@ -15,6 +17,9 @@ import copy
 from replay import *
 from schedule import *
 from models import TDQN
+from agents.pdqn import PDQNAgent
+from agents.pdqn_split import SplitPDQNAgent
+from agents.pdqn_multipass import MultiPassPDQNAgent
 
 from env import *
 import jericho
@@ -22,7 +27,7 @@ from jericho.template_action_generator import TemplateActionGenerator
 
 import sentencepiece as spm
 
-
+wandb.init(project="my-project")
 def configure_logger(log_dir):
     logger.configure(log_dir, format_strs=['log'])
     global tb
@@ -203,10 +208,35 @@ class TDQN_Trainer(object):
         episode = 1
         state_text, info = env.reset()
         state_rep = self.state_rep_generator(state_text)
-
+        agent_class = PDQNAgent
         for frame_idx in range(1, self.num_steps + 1):
             found_valid_action = False
             while not found_valid_action:
+                # agent = agent_class(
+                #       observation_space=env.observation_space.spaces[0], action_space=env.action_space,#need to get these
+                #       batch_size=batch_size,
+                #       learning_rate_actor=learning_rate_actor,  # 0.0001
+                #       learning_rate_actor_param=learning_rate_actor_param,  # 0.001
+                #       epsilon_steps=epsilon_steps,
+                #       epsilon_final=epsilon_final,
+                #       gamma=gamma,
+                #       clip_grad=clip_grad,
+                #       indexed=indexed,
+                #       average=average,
+                #       random_weighted=random_weighted,
+                #       tau_actor=tau_actor,
+                #       weighted=weighted,
+                #       tau_actor_param=tau_actor_param,
+                #       initial_memory_threshold=initial_memory_threshold,
+                #       use_ornstein_noise=use_ornstein_noise,
+                #       replay_memory_size=replay_memory_size,
+                #       inverting_gradients=inverting_gradients,
+                #       actor_kwargs={'hidden_layers': layers, 'output_layer_init_std': 1e-5,
+                #                      'action_input_layer': action_input_layer,},
+                #       actor_param_kwargs={'hidden_layers': layers, 'output_layer_init_std': 1e-5,
+                #                           'squashing_function': False},
+                #       zero_index_gradients=zero_index_gradients,
+                #       seed=seed)
                 templates, o1s, o2s, q_ts, q_o1s, q_o2s = self.model.poly_act(state_rep)
                 for template, o1, o2, q_t, q_o1, q_o2 in zip(templates, o1s, o2s, q_ts, q_o1s, q_o2s):
                     action = [template, o1, o2]
@@ -220,6 +250,7 @@ class TDQN_Trainer(object):
                 log('Action: {} Q_t: {:.2f} Q_o1: {:.2f} Q_o2: {:.2f}'.format(action_str, q_t, q_o1, q_o2))
                 log('Obs: {}'.format(clean(next_state_text.split('|')[2])))
                 log('Reward {}: {}'.format(env.steps, reward))
+                
 
             valid_acts = info['valid']
             template_targets, obj_targets = self.generate_targets_multilabel(valid_acts)
@@ -234,6 +265,7 @@ class TDQN_Trainer(object):
                 if episode % 100 == 0:
                     log('Episode {} Score {}\n'.format(episode, score))
                 tb.logkv_mean('EpisodeScore', score)
+                wandb.log({'epoch': episode, 'Score': score})
                 state_text, info = env.reset()
                 state_rep = self.state_rep_generator(state_text)
                 episode += 1
@@ -242,6 +274,7 @@ class TDQN_Trainer(object):
                 if frame_idx % self.update_freq == 0:
                     loss = self.compute_td_loss()
                     tb.logkv_mean('Loss', loss.item())
+                    wandb.log({'epoch': episode, 'loss': loss.item()})
 
             if frame_idx % self.update_freq_tar == 0:
                 self.target_model = copy.deepcopy(self.model)
@@ -259,6 +292,7 @@ class TDQN_Trainer(object):
             'replay_buffer': self.replay_buffer
         }
         torch.save(parameters, pjoin(self.args.output_dir, self.filename + '_final.pt'))
+        wandb.save("mymodel.h5")
 
 
 def pad_sequences(sequences, maxlen=None, dtype='int32', value=0.):
