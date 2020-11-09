@@ -5,7 +5,7 @@ from tdqn import TDQN_Trainer
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rom_path', default='/content/gdrive/My Drive/Colab Notebooks/tdqn/z-machine-games-master/jericho-game-suite/zork1.z5')
+    parser.add_argument('--rom_path', default='pentari.z5')
     parser.add_argument('--output_dir', default='logs')
     parser.add_argument('--spm_path', default='/content/gdrive/My Drive/tdqn/spm_models/unigram_8k.model')
     parser.add_argument('--batch_size', default=64, type=int)
