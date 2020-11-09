@@ -27,7 +27,7 @@ from jericho.template_action_generator import TemplateActionGenerator
 
 import sentencepiece as spm
 
-wandb.init(project="my-project", name = "zork1.z5 testing")# rename each different game
+wandb.init(project="my-project", name = "Pentari.z5 baseline")# rename each different game
 def configure_logger(log_dir):
     logger.configure(log_dir, format_strs=['log'])
     global tb
