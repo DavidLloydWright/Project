@@ -27,7 +27,7 @@ from jericho.template_action_generator import TemplateActionGenerator
 
 import sentencepiece as spm
 
-wandb.init(project="my-project")
+wandb.init(project="my-project", name = "zork1.z5 testing")# rename each different game
 def configure_logger(log_dir):
     logger.configure(log_dir, format_strs=['log'])
     global tb
@@ -56,7 +56,7 @@ class TDQN_Trainer(object):
         self.vocab_act, self.vocab_act_rev = self.load_vocab_act(args.rom_path)
         vocab_size = len(self.sp)
         vocab_size_act = len(self.vocab_act.keys())
-
+        
         self.template_generator = TemplateActionGenerator(self.binding)
         self.template_size = len(self.template_generator.templates)
 
@@ -64,9 +64,10 @@ class TDQN_Trainer(object):
             self.replay_buffer = PriorityReplayBuffer(int(args.replay_buffer_size))
         elif args.replay_buffer_type == 'standard':
             self.replay_buffer = ReplayBuffer(int(args.replay_buffer_size))
-
-        self.model = TDQN(args, self.template_size, vocab_size, vocab_size_act).cuda()
-        self.target_model = TDQN(args, self.template_size, vocab_size, vocab_size_act).cuda()
+        self.action_size = self.template_size
+        self.action_parameter_size = vocab_size_act
+        self.model = TDQN(args, self.action_size, self.action_parameter_size, self.template_size, vocab_size, vocab_size_act).cuda()
+        self.target_model = TDQN(args, self.action_size, self.action_parameter_size, self.template_size, vocab_size, vocab_size_act).cuda()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr)
 
@@ -75,7 +76,8 @@ class TDQN_Trainer(object):
         self.gamma = args.gamma
 
         self.rho = args.rho
-
+        self.vocab_size_act = vocab_size_act
+        
         self.bce_loss = nn.BCELoss()
 
     def load_vocab_act(self, rom_path):
@@ -115,7 +117,7 @@ class TDQN_Trainer(object):
         # plt.show()
         fig.savefig('plots/' + self.filename + '_' + str(frame_idx) + '.png')
 
-    def compute_td_loss(self):
+    def compute_td_loss(self, frame_idx):
         state, action, reward, next_state, done, valid = self.replay_buffer.sample(self.batch_size, self.rho)
         action = torch.LongTensor(action).cuda()
         state = torch.LongTensor(state).permute(1, 0, 2).cuda()
@@ -150,7 +152,7 @@ class TDQN_Trainer(object):
                           self.bce_loss(F.softmax(q_o1, dim=1), obj_targets)+\
                           self.bce_loss(F.softmax(q_o2, dim=1), obj_targets)
         tb.logkv_mean('SupervisedLoss', supervised_loss.item())
-
+        wandb.log({'SupervisedLoss': supervised_loss.item()}, step = frame_idx)
         self.target_model.flatten_parameters()
         next_q_t, next_q_o1, next_q_o2 = self.target_model(next_state)
 
@@ -167,6 +169,7 @@ class TDQN_Trainer(object):
                   F.smooth_l1_loss(q_o2 * o2_mask, o2_mask * (reward + self.gamma * next_q_o2).detach())
 
         tb.logkv_mean('TDLoss', td_loss.item())
+        wandb.log({'TDLoss': td_loss.item()}, step = frame_idx)
         loss = td_loss + supervised_loss
 
         self.optimizer.zero_grad()
@@ -200,6 +203,7 @@ class TDQN_Trainer(object):
 
 
     def train(self):
+        print("Hi", flush = True)
         start = time.time()
         env = JerichoEnv(self.args.rom_path, 0, self.vocab_act_rev,
                          self.args.env_step_limit)
@@ -208,35 +212,12 @@ class TDQN_Trainer(object):
         episode = 1
         state_text, info = env.reset()
         state_rep = self.state_rep_generator(state_text)
+        print("TESTRTING", flush = True)
+        print(state_rep, flush = True)
         agent_class = PDQNAgent
         for frame_idx in range(1, self.num_steps + 1):
             found_valid_action = False
             while not found_valid_action:
-                # agent = agent_class(
-                #       observation_space=env.observation_space.spaces[0], action_space=env.action_space,#need to get these
-                #       batch_size=batch_size,
-                #       learning_rate_actor=learning_rate_actor,  # 0.0001
-                #       learning_rate_actor_param=learning_rate_actor_param,  # 0.001
-                #       epsilon_steps=epsilon_steps,
-                #       epsilon_final=epsilon_final,
-                #       gamma=gamma,
-                #       clip_grad=clip_grad,
-                #       indexed=indexed,
-                #       average=average,
-                #       random_weighted=random_weighted,
-                #       tau_actor=tau_actor,
-                #       weighted=weighted,
-                #       tau_actor_param=tau_actor_param,
-                #       initial_memory_threshold=initial_memory_threshold,
-                #       use_ornstein_noise=use_ornstein_noise,
-                #       replay_memory_size=replay_memory_size,
-                #       inverting_gradients=inverting_gradients,
-                #       actor_kwargs={'hidden_layers': layers, 'output_layer_init_std': 1e-5,
-                #                      'action_input_layer': action_input_layer,},
-                #       actor_param_kwargs={'hidden_layers': layers, 'output_layer_init_std': 1e-5,
-                #                           'squashing_function': False},
-                #       zero_index_gradients=zero_index_gradients,
-                #       seed=seed)
                 templates, o1s, o2s, q_ts, q_o1s, q_o2s = self.model.poly_act(state_rep)
                 for template, o1, o2, q_t, q_o1, q_o2 in zip(templates, o1s, o2s, q_ts, q_o1s, q_o2s):
                     action = [template, o1, o2]
@@ -265,23 +246,27 @@ class TDQN_Trainer(object):
                 if episode % 100 == 0:
                     log('Episode {} Score {}\n'.format(episode, score))
                 tb.logkv_mean('EpisodeScore', score)
-                wandb.log({'epoch': episode, 'Score': score})
+                wandb.log({'Score': score}, step = frame_idx)
                 state_text, info = env.reset()
                 state_rep = self.state_rep_generator(state_text)
                 episode += 1
 
             if len(self.replay_buffer) > self.batch_size:
                 if frame_idx % self.update_freq == 0:
-                    loss = self.compute_td_loss()
+                    loss = self.compute_td_loss(frame_idx)
                     tb.logkv_mean('Loss', loss.item())
-                    wandb.log({'epoch': episode, 'loss': loss.item()})
+                    # tb.logkv('T', template)
+                    # tb.logkv('T2', q_t)
+                    wandb.log({'Loss': loss.item()}, step = frame_idx)
 
             if frame_idx % self.update_freq_tar == 0:
                 self.target_model = copy.deepcopy(self.model)
 
             if frame_idx % self.log_freq == 0:
                 tb.logkv('Step', frame_idx)
+                wandb.log({'Step': frame_idx}, step = frame_idx)
                 tb.logkv('FPS', int(frame_idx/(time.time()-start)))
+                wandb.log({'FPS': int(frame_idx/(time.time()-start))}, step = frame_idx)
                 tb.dumpkvs()
 
         env.close()
@@ -291,9 +276,11 @@ class TDQN_Trainer(object):
             'target': self.target_model,
             'replay_buffer': self.replay_buffer
         }
+        print("HI1", flush = True)
         torch.save(parameters, pjoin(self.args.output_dir, self.filename + '_final.pt'))
+        print("HI2", flush = True)
         wandb.save("mymodel.h5")
-
+        print("HI3", flush = True)
 
 def pad_sequences(sequences, maxlen=None, dtype='int32', value=0.):
     '''
