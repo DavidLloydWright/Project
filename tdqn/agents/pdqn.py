@@ -174,8 +174,8 @@ class PDQNAgent(Agent):
                  seed=None):
         super(PDQNAgent, self).__init__(observation_space, action_space)
         self.device = torch.device(device)
-        self.num_actions = self.action_space.spaces[0].n
-        self.action_parameter_sizes = np.array([self.action_space.spaces[i].shape[0] for i in range(1,self.num_actions+1)])
+        self.num_actions = self.action_space.spaces[0].n # 3
+        self.action_parameter_sizes = np.array([self.action_space.spaces[i].shape[0] for i in range(1,self.num_actions+1)]) #low or high values
         self.action_parameter_size = int(self.action_parameter_sizes.sum())
         self.action_max = torch.from_numpy(np.ones((self.num_actions,))).float().to(device)
         self.action_min = -self.action_max.detach()
@@ -297,7 +297,7 @@ class PDQNAgent(Agent):
                 torch.cuda.manual_seed(seed)
 
     def _ornstein_uhlenbeck_noise(self, all_action_parameters):
-        """ Continuous action exploration using an Ornstein–Uhlenbeck process. """
+        """ Continuous action exploration using an OrnsteinÃ¢â‚¬â€œUhlenbeck process. """
         return all_action_parameters.data.numpy() + (self.noise.sample() * self.action_parameter_range_numpy)
 
     def start_episode(self):
@@ -442,8 +442,8 @@ class PDQNAgent(Agent):
         action_params.requires_grad = True
         assert (self.weighted ^ self.average ^ self.random_weighted) or \
                not (self.weighted or self.average or self.random_weighted)
-        Q = self.actor(states, action_params)
-        Q_val = Q
+        Q = self.actor(states, action_params) # What is Q
+        Q_val = Q 
         if self.weighted:
             # approximate categorical probability density (i.e. counting)
             counts = Counter(actions.cpu().numpy())
