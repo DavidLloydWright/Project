@@ -27,7 +27,7 @@ from jericho.template_action_generator import TemplateActionGenerator
 
 import sentencepiece as spm
 
-wandb.init(project="my-project")
+wandb.init(project="my-project", name="Zork1.z5 baseline")
 def configure_logger(log_dir):
     logger.configure(log_dir, format_strs=['log'])
     global tb
@@ -206,6 +206,8 @@ class TDQN_Trainer(object):
         env.create()
 
         episode = 1
+        episode_score = np.array([])
+        episode_index = 0
         state_text, info = env.reset()
         state_rep = self.state_rep_generator(state_text)
         agent_class = PDQNAgent
@@ -264,17 +266,23 @@ class TDQN_Trainer(object):
                 score = info['score']
                 if episode % 100 == 0:
                     log('Episode {} Score {}\n'.format(episode, score))
-                tb.logkv_mean('EpisodeScore', score)
+                if episode < 11:
+                    episode_score = np.append(episode_score, [score])
+                else:
+                    episode_score[episode_index] = score 
+                wandb.log({'Score': score}, step = frame_idx)
+                wandb.log({'Episode Score': np.mean(episode_score)}, step = episode)
                 wandb.log({'epoch': episode, 'Score': score})
                 state_text, info = env.reset()
                 state_rep = self.state_rep_generator(state_text)
                 episode += 1
+                episode_index = (episode_index + 1)%10
 
             if len(self.replay_buffer) > self.batch_size:
                 if frame_idx % self.update_freq == 0:
                     loss = self.compute_td_loss()
                     tb.logkv_mean('Loss', loss.item())
-                    wandb.log({'epoch': episode, 'loss': loss.item()})
+                    #wandb.log({'epoch': episode, 'loss': loss.item()})
 
             if frame_idx % self.update_freq_tar == 0:
                 self.target_model = copy.deepcopy(self.model)
