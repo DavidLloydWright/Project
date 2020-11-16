@@ -27,7 +27,7 @@ from jericho.template_action_generator import TemplateActionGenerator
 
 import sentencepiece as spm
 
-wandb.init(project="my-project", name = "Pentari.z5 baseline")# rename each different game
+wandb.init(project="my-project", name = "Zork1.z5 large Test")# rename each different game
 def configure_logger(log_dir):
     logger.configure(log_dir, format_strs=['log'])
     global tb
@@ -152,7 +152,7 @@ class TDQN_Trainer(object):
                           self.bce_loss(F.softmax(q_o1, dim=1), obj_targets)+\
                           self.bce_loss(F.softmax(q_o2, dim=1), obj_targets)
         tb.logkv_mean('SupervisedLoss', supervised_loss.item())
-        wandb.log({'SupervisedLoss': supervised_loss.item()}, step = frame_idx)
+        #wandb.log({'SupervisedLoss': supervised_loss.item()}, step = frame_idx)
         self.target_model.flatten_parameters()
         next_q_t, next_q_o1, next_q_o2 = self.target_model(next_state)
 
@@ -169,7 +169,7 @@ class TDQN_Trainer(object):
                   F.smooth_l1_loss(q_o2 * o2_mask, o2_mask * (reward + self.gamma * next_q_o2).detach())
 
         tb.logkv_mean('TDLoss', td_loss.item())
-        wandb.log({'TDLoss': td_loss.item()}, step = frame_idx)
+        #wandb.log({'TDLoss': td_loss.item()}, step = frame_idx)
         loss = td_loss + supervised_loss
 
         self.optimizer.zero_grad()
@@ -203,7 +203,6 @@ class TDQN_Trainer(object):
 
 
     def train(self):
-        print("Hi", flush = True)
         start = time.time()
         env = JerichoEnv(self.args.rom_path, 0, self.vocab_act_rev,
                          self.args.env_step_limit)
@@ -212,9 +211,9 @@ class TDQN_Trainer(object):
         episode = 1
         state_text, info = env.reset()
         state_rep = self.state_rep_generator(state_text)
-        print("TESTRTING", flush = True)
-        print(state_rep, flush = True)
         agent_class = PDQNAgent
+        episode_scores = np.array([])
+        episode_index = 0
         for frame_idx in range(1, self.num_steps + 1):
             found_valid_action = False
             while not found_valid_action:
@@ -243,13 +242,19 @@ class TDQN_Trainer(object):
 
             if done:
                 score = info['score']
+                if episode <11:
+                    episode_scores = np.append(episode_scores, [score])
+                else:
+                    episode_scores[episode_index] = score 
                 if episode % 100 == 0:
                     log('Episode {} Score {}\n'.format(episode, score))
                 tb.logkv_mean('EpisodeScore', score)
-                wandb.log({'Score': score}, step = frame_idx)
+                wandb.log({'epoch (step)' : frame_idx, 'Reward': reward})
+                wandb.log({'epoch (step2)' : episode, 'Episode Score': np.mean(episode_scores)})
                 state_text, info = env.reset()
                 state_rep = self.state_rep_generator(state_text)
                 episode += 1
+                episode_index = (episode_index+1)%10
 
             if len(self.replay_buffer) > self.batch_size:
                 if frame_idx % self.update_freq == 0:
@@ -257,16 +262,16 @@ class TDQN_Trainer(object):
                     tb.logkv_mean('Loss', loss.item())
                     # tb.logkv('T', template)
                     # tb.logkv('T2', q_t)
-                    wandb.log({'Loss': loss.item()}, step = frame_idx)
+                    #wandb.log({'Loss': loss.item()}, step = frame_idx)
 
             if frame_idx % self.update_freq_tar == 0:
                 self.target_model = copy.deepcopy(self.model)
 
             if frame_idx % self.log_freq == 0:
                 tb.logkv('Step', frame_idx)
-                wandb.log({'Step': frame_idx}, step = frame_idx)
+                #wandb.log({'Step': frame_idx}, step = frame_idx)
                 tb.logkv('FPS', int(frame_idx/(time.time()-start)))
-                wandb.log({'FPS': int(frame_idx/(time.time()-start))}, step = frame_idx)
+                #wandb.log({'FPS': int(frame_idx/(time.time()-start))}, step = frame_idx)
                 tb.dumpkvs()
 
         env.close()
