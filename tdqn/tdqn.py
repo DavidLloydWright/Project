@@ -270,9 +270,9 @@ class TDQN_Trainer(object):
                     episode_score = np.append(episode_score, [score])
                 else:
                     episode_score[episode_index] = score 
-                wandb.log({'Score': score}, step = frame_idx)
-                wandb.log({'Episode Score': np.mean(episode_score)}, step = episode)
-                wandb.log({'epoch': episode, 'Score': score})
+                wandb.log({'Epoch (step1)': frame_idx, 'Individual tdqn Score': score)
+                wandb.log({'Epoch (step2)': episode, 'Average tdqn Score': np.mean(episode_score)})
+                #wandb.log({'epoch': episode, 'Score': score})
                 state_text, info = env.reset()
                 state_rep = self.state_rep_generator(state_text)
                 episode += 1
