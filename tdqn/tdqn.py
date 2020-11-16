@@ -27,7 +27,6 @@ from jericho.template_action_generator import TemplateActionGenerator
 
 import sentencepiece as spm
 
-wandb.init(project="my-project", name="Zork1.z5 baseline")
 def configure_logger(log_dir):
     logger.configure(log_dir, format_strs=['log'])
     global tb
@@ -49,7 +48,8 @@ class TDQN_Trainer(object):
         self.update_freq = args.update_freq_td
         self.update_freq_tar = args.update_freq_tar
         self.filename = 'tdqn'+args.rom_path + str(args.run_number)
-
+        
+        wandb.init(project="my-project", name= self.filename)
         self.sp = spm.SentencePieceProcessor()
         self.sp.Load(args.spm_path)
         self.binding = jericho.load_bindings(args.rom_path)
