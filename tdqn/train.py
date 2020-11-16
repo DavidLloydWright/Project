@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('--replay_buffer_type', default='priority')
     parser.add_argument('--clip', default=40, type=float)
     parser.add_argument('--max_seq_len', default=300, type=int)
+    parser.add_argument('--run_number', default = 1, type = int)
     return parser.parse_args()
 
 
