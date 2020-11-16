@@ -48,7 +48,7 @@ class TDQN_Trainer(object):
         self.log_freq = args.log_freq
         self.update_freq = args.update_freq_td
         self.update_freq_tar = args.update_freq_tar
-        self.filename = 'tdqn'
+        self.filename = 'tdqn'+args.rom_path + str(args.run_number)
 
         self.sp = spm.SentencePieceProcessor()
         self.sp.Load(args.spm_path)
@@ -77,7 +77,7 @@ class TDQN_Trainer(object):
         self.rho = args.rho
 
         self.bce_loss = nn.BCELoss()
-
+        
     def load_vocab_act(self, rom_path):
         #loading vocab directly from Jericho
         env = FrotzEnv(rom_path)
@@ -214,31 +214,6 @@ class TDQN_Trainer(object):
         for frame_idx in range(1, self.num_steps + 1):
             found_valid_action = False
             while not found_valid_action:
-                # agent = agent_class(
-                #       observation_space=env.observation_space.spaces[0], action_space=env.action_space,#need to get these
-                #       batch_size=batch_size,
-                #       learning_rate_actor=learning_rate_actor,  # 0.0001
-                #       learning_rate_actor_param=learning_rate_actor_param,  # 0.001
-                #       epsilon_steps=epsilon_steps,
-                #       epsilon_final=epsilon_final,
-                #       gamma=gamma,
-                #       clip_grad=clip_grad,
-                #       indexed=indexed,
-                #       average=average,
-                #       random_weighted=random_weighted,
-                #       tau_actor=tau_actor,
-                #       weighted=weighted,
-                #       tau_actor_param=tau_actor_param,
-                #       initial_memory_threshold=initial_memory_threshold,
-                #       use_ornstein_noise=use_ornstein_noise,
-                #       replay_memory_size=replay_memory_size,
-                #       inverting_gradients=inverting_gradients,
-                #       actor_kwargs={'hidden_layers': layers, 'output_layer_init_std': 1e-5,
-                #                      'action_input_layer': action_input_layer,},
-                #       actor_param_kwargs={'hidden_layers': layers, 'output_layer_init_std': 1e-5,
-                #                           'squashing_function': False},
-                #       zero_index_gradients=zero_index_gradients,
-                #       seed=seed)
                 templates, o1s, o2s, q_ts, q_o1s, q_o2s = self.model.poly_act(state_rep)
                 for template, o1, o2, q_t, q_o1, q_o2 in zip(templates, o1s, o2s, q_ts, q_o1s, q_o2s):
                     action = [template, o1, o2]
@@ -270,7 +245,7 @@ class TDQN_Trainer(object):
                     episode_score = np.append(episode_score, [score])
                 else:
                     episode_score[episode_index] = score 
-                wandb.log({'Epoch (step1)': frame_idx, 'Individual tdqn Score': score)
+                wandb.log({'Epoch (step1)': frame_idx, 'Individual tdqn Score': score})
                 wandb.log({'Epoch (step2)': episode, 'Average tdqn Score': np.mean(episode_score)})
                 #wandb.log({'epoch': episode, 'Score': score})
                 state_text, info = env.reset()
@@ -282,7 +257,7 @@ class TDQN_Trainer(object):
                 if frame_idx % self.update_freq == 0:
                     loss = self.compute_td_loss()
                     tb.logkv_mean('Loss', loss.item())
-                    #wandb.log({'epoch': episode, 'loss': loss.item()})
+                    
 
             if frame_idx % self.update_freq_tar == 0:
                 self.target_model = copy.deepcopy(self.model)

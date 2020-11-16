@@ -5,7 +5,7 @@ from tdqn import TDQN_Trainer
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rom_path', default='zork1.z5')
+    parser.add_argument('--rom_path', default='zork2.z5')
     parser.add_argument('--output_dir', default='logs')
     parser.add_argument('--spm_path', default='../spm_models/unigram_8k.model')
     parser.add_argument('--batch_size', default=64, type=int)
@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('--replay_buffer_type', default='priority')
     parser.add_argument('--clip', default=40, type=float)
     parser.add_argument('--max_seq_len', default=300, type=int)
+    parser.add_argument('--run_number', default = 1, type = int)
     return parser.parse_args()
 
 
