@@ -47,7 +47,7 @@ class TDQN_Trainer(object):
         self.log_freq = args.log_freq
         self.update_freq = args.update_freq_td
         self.update_freq_tar = args.update_freq_tar
-        self.filename = 'tdqn'
+        self.filename = 'ptdqn' + args.rom_path + str(args.run_number)
         wandb.init(project="my-project", name=self.filename)
         self.sp = spm.SentencePieceProcessor()
         self.sp.Load(args.spm_path)
@@ -248,8 +248,8 @@ class TDQN_Trainer(object):
                 if episode % 100 == 0:
                     log('Episode {} Score {}\n'.format(episode, score))
                 tb.logkv_mean('EpisodeScore', score)
-                wandb.log({'epoch (step)' : frame_idx, 'Reward': reward})
-                wandb.log({'epoch (step2)' : episode, 'Episode Score': np.mean(episode_scores)})
+                wandb.log({'Epoch (step1)': frame_idx, 'Individual ptdqn Score': score})
+                wandb.log({'Epoch (step2)': episode, 'Average ptdqn Score': np.mean(episode_scores)})
                 state_text, info = env.reset()
                 state_rep = self.state_rep_generator(state_text)
                 episode += 1
@@ -280,11 +280,9 @@ class TDQN_Trainer(object):
             'target': self.target_model,
             'replay_buffer': self.replay_buffer
         }
-        print("HI1", flush = True)
         torch.save(parameters, pjoin(self.args.output_dir, self.filename + '_final.pt'))
-        print("HI2", flush = True)
         wandb.save("mymodel.h5")
-        print("HI3", flush = True)
+        
 
 def pad_sequences(sequences, maxlen=None, dtype='int32', value=0.):
     '''
