@@ -47,8 +47,10 @@ class TDQN_Trainer(object):
         self.log_freq = args.log_freq
         self.update_freq = args.update_freq_td
         self.update_freq_tar = args.update_freq_tar
+
         self.filename = 'ptdqn' + args.rom_path + str(args.run_number)
         wandb.init(project="my-project", name=self.filename)
+
         self.sp = spm.SentencePieceProcessor()
         self.sp.Load(args.spm_path)
         self.binding = jericho.load_bindings(args.rom_path)
@@ -78,7 +80,7 @@ class TDQN_Trainer(object):
         self.vocab_size_act = vocab_size_act
         
         self.bce_loss = nn.BCELoss()
-
+        
     def load_vocab_act(self, rom_path):
         #loading vocab directly from Jericho
         env = FrotzEnv(rom_path)
@@ -208,6 +210,8 @@ class TDQN_Trainer(object):
         env.create()
 
         episode = 1
+        episode_score = np.array([])
+        episode_index = 0
         state_text, info = env.reset()
         state_rep = self.state_rep_generator(state_text)
         agent_class = PDQNAgent
@@ -247,6 +251,7 @@ class TDQN_Trainer(object):
                     episode_scores[episode_index] = score 
                 if episode % 100 == 0:
                     log('Episode {} Score {}\n'.format(episode, score))
+
                 tb.logkv_mean('EpisodeScore', score)
                 wandb.log({'Epoch (step1)': frame_idx, 'Individual ptdqn Score': score})
                 wandb.log({'Epoch (step2)': episode, 'Average ptdqn Score': np.mean(episode_scores)})
@@ -255,13 +260,16 @@ class TDQN_Trainer(object):
                 episode += 1
                 episode_index = (episode_index+1)%10
 
+
             if len(self.replay_buffer) > self.batch_size:
                 if frame_idx % self.update_freq == 0:
                     loss = self.compute_td_loss(frame_idx)
                     tb.logkv_mean('Loss', loss.item())
+
                     # tb.logkv('T', template)
                     # tb.logkv('T2', q_t)
                     #wandb.log({'Loss': loss.item()}, step = frame_idx)
+
 
             if frame_idx % self.update_freq_tar == 0:
                 self.target_model = copy.deepcopy(self.model)
