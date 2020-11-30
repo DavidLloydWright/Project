@@ -47,16 +47,17 @@ class TDQN_Trainer(object):
         self.log_freq = args.log_freq
         self.update_freq = args.update_freq_td
         self.update_freq_tar = args.update_freq_tar
-        self.filename = 'tdqn'+args.rom_path + str(args.run_number)
-        
-        wandb.init(project="my-project", name= self.filename)
+
+        self.filename = 'ptdqn' + args.rom_path + str(args.run_number)
+        wandb.init(project="my-project", name=self.filename)
+
         self.sp = spm.SentencePieceProcessor()
         self.sp.Load(args.spm_path)
         self.binding = jericho.load_bindings(args.rom_path)
         self.vocab_act, self.vocab_act_rev = self.load_vocab_act(args.rom_path)
         vocab_size = len(self.sp)
         vocab_size_act = len(self.vocab_act.keys())
-
+        
         self.template_generator = TemplateActionGenerator(self.binding)
         self.template_size = len(self.template_generator.templates)
 
@@ -64,9 +65,10 @@ class TDQN_Trainer(object):
             self.replay_buffer = PriorityReplayBuffer(int(args.replay_buffer_size))
         elif args.replay_buffer_type == 'standard':
             self.replay_buffer = ReplayBuffer(int(args.replay_buffer_size))
-
-        self.model = TDQN(args, self.template_size, vocab_size, vocab_size_act).cuda()
-        self.target_model = TDQN(args, self.template_size, vocab_size, vocab_size_act).cuda()
+        self.action_size = self.template_size
+        self.action_parameter_size = vocab_size_act
+        self.model = TDQN(args, self.action_size, self.action_parameter_size, self.template_size, vocab_size, vocab_size_act).cuda()
+        self.target_model = TDQN(args, self.action_size, self.action_parameter_size, self.template_size, vocab_size, vocab_size_act).cuda()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr)
 
@@ -75,7 +77,8 @@ class TDQN_Trainer(object):
         self.gamma = args.gamma
 
         self.rho = args.rho
-
+        self.vocab_size_act = vocab_size_act
+        
         self.bce_loss = nn.BCELoss()
         
     def load_vocab_act(self, rom_path):
@@ -115,7 +118,7 @@ class TDQN_Trainer(object):
         # plt.show()
         fig.savefig('plots/' + self.filename + '_' + str(frame_idx) + '.png')
 
-    def compute_td_loss(self):
+    def compute_td_loss(self, frame_idx):
         state, action, reward, next_state, done, valid = self.replay_buffer.sample(self.batch_size, self.rho)
         action = torch.LongTensor(action).cuda()
         state = torch.LongTensor(state).permute(1, 0, 2).cuda()
@@ -150,7 +153,7 @@ class TDQN_Trainer(object):
                           self.bce_loss(F.softmax(q_o1, dim=1), obj_targets)+\
                           self.bce_loss(F.softmax(q_o2, dim=1), obj_targets)
         tb.logkv_mean('SupervisedLoss', supervised_loss.item())
-
+        #wandb.log({'SupervisedLoss': supervised_loss.item()}, step = frame_idx)
         self.target_model.flatten_parameters()
         next_q_t, next_q_o1, next_q_o2 = self.target_model(next_state)
 
@@ -167,6 +170,7 @@ class TDQN_Trainer(object):
                   F.smooth_l1_loss(q_o2 * o2_mask, o2_mask * (reward + self.gamma * next_q_o2).detach())
 
         tb.logkv_mean('TDLoss', td_loss.item())
+        #wandb.log({'TDLoss': td_loss.item()}, step = frame_idx)
         loss = td_loss + supervised_loss
 
         self.optimizer.zero_grad()
@@ -211,6 +215,8 @@ class TDQN_Trainer(object):
         state_text, info = env.reset()
         state_rep = self.state_rep_generator(state_text)
         agent_class = PDQNAgent
+        episode_scores = np.array([])
+        episode_index = 0
         for frame_idx in range(1, self.num_steps + 1):
             found_valid_action = False
             while not found_valid_action:
@@ -239,32 +245,40 @@ class TDQN_Trainer(object):
 
             if done:
                 score = info['score']
+                if episode <11:
+                    episode_scores = np.append(episode_scores, [score])
+                else:
+                    episode_scores[episode_index] = score 
                 if episode % 100 == 0:
                     log('Episode {} Score {}\n'.format(episode, score))
-                if episode < 11:
-                    episode_score = np.append(episode_score, [score])
-                else:
-                    episode_score[episode_index] = score 
-                wandb.log({'Epoch (step1)': frame_idx, 'Individual tdqn Score': score})
-                wandb.log({'Epoch (step2)': episode, 'Average tdqn Score': np.mean(episode_score)})
-                #wandb.log({'epoch': episode, 'Score': score})
+
+                tb.logkv_mean('EpisodeScore', score)
+                wandb.log({'Epoch (step1)': frame_idx, 'Individual ptdqn Score': score})
+                wandb.log({'Epoch (step2)': episode, 'Average ptdqn Score': np.mean(episode_scores)})
                 state_text, info = env.reset()
                 state_rep = self.state_rep_generator(state_text)
                 episode += 1
-                episode_index = (episode_index + 1)%10
+                episode_index = (episode_index+1)%10
+
 
             if len(self.replay_buffer) > self.batch_size:
                 if frame_idx % self.update_freq == 0:
-                    loss = self.compute_td_loss()
+                    loss = self.compute_td_loss(frame_idx)
                     tb.logkv_mean('Loss', loss.item())
-                    
+
+                    # tb.logkv('T', template)
+                    # tb.logkv('T2', q_t)
+                    #wandb.log({'Loss': loss.item()}, step = frame_idx)
+
 
             if frame_idx % self.update_freq_tar == 0:
                 self.target_model = copy.deepcopy(self.model)
 
             if frame_idx % self.log_freq == 0:
                 tb.logkv('Step', frame_idx)
+                #wandb.log({'Step': frame_idx}, step = frame_idx)
                 tb.logkv('FPS', int(frame_idx/(time.time()-start)))
+                #wandb.log({'FPS': int(frame_idx/(time.time()-start))}, step = frame_idx)
                 tb.dumpkvs()
 
         env.close()
@@ -276,7 +290,7 @@ class TDQN_Trainer(object):
         }
         torch.save(parameters, pjoin(self.args.output_dir, self.filename + '_final.pt'))
         wandb.save("mymodel.h5")
-
+        
 
 def pad_sequences(sequences, maxlen=None, dtype='int32', value=0.):
     '''

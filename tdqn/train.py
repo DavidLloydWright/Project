@@ -5,7 +5,9 @@ from tdqn import TDQN_Trainer
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rom_path', default='zork2.z5')
+
+    parser.add_argument('--rom_path', default='zork1.z5')
+
     parser.add_argument('--output_dir', default='logs')
     parser.add_argument('--spm_path', default='../spm_models/unigram_8k.model')
     parser.add_argument('--batch_size', default=64, type=int)
